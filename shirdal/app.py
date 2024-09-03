@@ -1,6 +1,6 @@
 from typing import Union, Callable
 
-from core import Container
+from .core import Container
 
 
 class Application:
