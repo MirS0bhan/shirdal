@@ -1,11 +1,12 @@
 from typing import Union, Callable
 
-from .core import Container
+from .core import Container, Broker
 
 
 class Application:
     def __init__(self):
         self.container = Container()
+        self.broker = Broker()
 
     def service(self, item: Union[object, Callable]) -> Union[object, Callable]:
         """Decorator to register a service in the container."""
@@ -16,4 +17,4 @@ class Application:
         """ Find endpoint and run it """
         endpoint = dt.endpoint
         f = self.container.resolve(endpoint)
-        f(dt)
+        self.broker.tm.add_task(lambda: f(dt))
