@@ -1,29 +1,31 @@
 import threading
 from collections import deque
-from typing import Callable
+from typing import Callable, Type
 import time
+
+from .queue import AbstractQueue, ListQueue
 
 
 class TaskManager:
-    def __init__(self):
-        self.tasks = deque()  # Use deque for task queue
+    def __init__(self, queue: Type[AbstractQueue]):
+        self.tasks = queue()  # Use deque for task queue
         self.lock = threading.Lock()
         self.condition = threading.Condition(self.lock)
 
     def add_task(self, task: Callable[[], None]) -> None:
         with self.condition:
-            self.tasks.append(task)
+            self.tasks.enqueue(task)
             self.condition.notify()  # Notify the executor that a task is available
 
     def get_task(self) -> Callable[[], None]:
         with self.condition:
             while not self.tasks:
                 self.condition.wait()  # Wait for a task to be added
-            return self.tasks.popleft()
+            return self.tasks.dequeue()
 
     def purge(self) -> None:
         with self.lock:
-            self.tasks.clear()  # Clear all tasks
+            pass  # Clear all tasks
 
 
 class TaskExecutor:
@@ -44,6 +46,6 @@ class TaskExecutor:
 
 
 class Broker:
-    def __init__(self):
-        self.tm = TaskManager()
+    def __init__(self, ):
+        self.tm = TaskManager(ListQueue)
         self.te = TaskExecutor(self.tm)
