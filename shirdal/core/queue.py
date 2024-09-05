@@ -18,11 +18,6 @@ class AbstractQueue(ABC):
         pass
 
     @abstractmethod
-    def __len__(self) -> int:
-        """Return the number of items in the queue."""
-        pass
-
-    @abstractmethod
     def peek(self):
         """Return the item at the front of the queue without removing it."""
         pass
@@ -50,4 +45,3 @@ class ListQueue(AbstractQueue):
         if self.is_empty():
             raise IndexError("peek from an empty queue")
         return self.queue[0]
-

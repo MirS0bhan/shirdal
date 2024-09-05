@@ -1,23 +1,22 @@
 import threading
-from collections import deque
-from typing import Callable, Type
 import time
 
 from .queue import AbstractQueue, ListQueue
+from .container import Container
 
 
 class TaskManager:
-    def __init__(self, queue: Type[AbstractQueue]):
-        self.tasks = queue()  # Use deque for task queue
+    def __init__(self, queue: AbstractQueue):
+        self.tasks = queue  # Use deque for task queue
         self.lock = threading.Lock()
         self.condition = threading.Condition(self.lock)
 
-    def add_task(self, task: Callable[[], None]) -> None:
+    def add_task(self, task: object) -> None:
         with self.condition:
             self.tasks.enqueue(task)
             self.condition.notify()  # Notify the executor that a task is available
 
-    def get_task(self) -> Callable[[], None]:
+    def get_task(self) -> object | None:
         with self.condition:
             while not self.tasks:
                 self.condition.wait()  # Wait for a task to be added
@@ -29,8 +28,9 @@ class TaskManager:
 
 
 class TaskExecutor:
-    def __init__(self, manager: TaskManager):
+    def __init__(self, manager: TaskManager, container: Container):
         self.manager = manager
+        self.container = container
         self.thread = threading.Thread(target=self.run)
         self.thread.daemon = True  # Daemonize thread
         self.thread.start()
@@ -38,14 +38,16 @@ class TaskExecutor:
     def run(self) -> None:
         while True:
             task = self.manager.get_task()
+            func = self.container.resolve(task)
             try:
-                task()  # Execute the task
+                func(task)  # Execute the task
             except Exception as e:
                 print(f"Error executing task: {e}")
             time.sleep(0.0001)  # Sleep to prevent busy waiting
 
 
 class Broker:
-    def __init__(self, ):
+    def __init__(self):
         self.tm = TaskManager(ListQueue)
-        self.te = TaskExecutor(self.tm)
+        self.co = Container()
+        self.te = TaskExecutor(self.tm, self.co)

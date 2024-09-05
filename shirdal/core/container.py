@@ -1,4 +1,4 @@
-from typing import Dict, Union, Callable, Container as CTNR
+from typing import Dict, Union, Callable, Container as Ctrn
 
 
 def get_name(item: Union[object, Callable]) -> str:
@@ -9,7 +9,7 @@ def get_name(item: Union[object, Callable]) -> str:
             return item.__class__.__name__
 
 
-class Container(CTNR):
+class Container(Ctrn):
     def __init__(self):
         self.registry: Dict[str, Union[object, Callable]] = {}
 
