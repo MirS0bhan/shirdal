@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "shirdal"
+version = "0.1.0"
+description = "Modern RPC message broker framework"
+authors = ["misano <me@MirSobhan.ir>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pyzmq = "^26.2.0"
+msgpack = "^1.0.8"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
