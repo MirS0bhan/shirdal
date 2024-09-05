@@ -1,4 +1,4 @@
-from shirdal.core.queue import ListQueue, AbstractQueue
+from shirdal.core.queue import AbstractQueue
 from .rpc import ServerRPC, ClientRPC
 
 
@@ -16,4 +16,4 @@ class ClientTaskManager(ClientRPC, TaskManager):
         ClientRPC.__init__(self, endpoint)
 
     def add_task(self, task: object) -> None:
-        return self._call('add_task',task=task)
+        return self._call('add_task', task=task)
