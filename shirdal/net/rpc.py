@@ -1,78 +1,56 @@
-from typing import Type
+from typing import Type, Dict, Any, List
 
-import zmq
+from .socket import ServerSocket, ClientSocket
+from .serialize import MsgPackSerializer, Serializer
 
-
-def get_methods(obj):
-    """
-    Retrieve all methods of an object excluding built-in special methods.
-
-    Args:
-    obj: The object whose methods are to be listed.
-
-    Returns:
-    list: A list of method names as strings.
-    """
-    # Get all attributes of the object
-    attributes = dir(obj)
-
-    # Filter out callable attributes (methods) and special methods
-    return [
-        attr for attr in attributes
-        if callable(getattr(obj, attr)) and not attr.startswith('__')
-    ]
+from pydantic import BaseModel
 
 
-class ServerRPC:
-    def __init__(self, endpoint):
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.REP)
-        self.socket.bind(endpoint)
+class Params(BaseModel):
+    args: List[Any] = []
+    kwargs: Dict[Any, Any] = {}
+
+
+class Message(BaseModel):
+    method: str
+    params: Params
+
+
+class ServerRPC(ServerSocket):
+    def __init__(self, port, serializer: Type[Serializer] = MsgPackSerializer):
+        super().__init__(serializer(), port)
 
     def start(self):
+        self.setup()
         while True:
-            message = self.socket.recv_json()
-            # Process the request (this is where you'd put your actual RPC logic)
+            raw = self.recv()
+            message = Message(**raw)
             response = self._process_request(message)
+            self.send(response)
 
-            # Send the message back to the client
-            self.socket.send_json(response)
+    def _process_request(self, request: Message):
+        func = getattr(self, request.method, None)
 
-    def _process_request(self, request):
-        # Placeholder for actual RPC logic
-        if 'method' in request and 'params' in request:
-            method = request['method']
-            params = request['params']
-
-            args = params.get('args', [])
-            kwargs = params.get('kwargs', {})
-
-            func = getattr(self, method)
-
-            return func(*args, **kwargs)
+        if callable(func):
+            return func(*request.params.args, **request.params.kwargs)
 
         return {'error': 'Unknown method'}
 
 
-class ClientRPC:
-    def __init__(self, endpoint):
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.REQ)
-        self.socket.connect(endpoint)
+class ClientRPC(ClientSocket):
+    def __init__(self, host, port):
+        serializer = MsgPackSerializer()
+        super().__init__(serializer, host, port)
 
-    def _call(self, method, *args, **kwargs):
-        # Prepare the request
-        request = {
-            'method': method,
-            'params': {
-                'args': list(args),
-                'kwargs': kwargs
-            }
-        }
+    def call(self, method, *args, **kwargs):
+        request = Message(
+            method=method,
+            params=Params(
+                args=args,
+                kwargs=kwargs
+            )
+        ).model_dump()
 
-        # Send request
-        self.socket.send_json(request)
-
-        # Wait for response
-        response = self.socket.recv_json()
+        self.send(request)
+        response = self.recv()
         return response

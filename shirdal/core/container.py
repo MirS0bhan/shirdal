@@ -1,21 +1,16 @@
 from typing import Dict, Union, Callable, Container as Ctrn
 
-
-def get_name(item: Union[object, Callable]) -> str:
-    match item.__class__.__name__:
-        case 'type' | 'function':
-            return item.__name__
-        case _:
-            return item.__class__.__name__
+from shirdal.utils import get_name
 
 
 class Container(Ctrn):
     def __init__(self):
         self.registry: Dict[str, Union[object, Callable]] = {}
 
-    def register(self, item: Union[object, Callable]):
-        item_name = get_name(item)
-        self.registry[item_name] = item
+    def register(self, *item: Union[object, Callable]):
+        for i in item:
+            item_name = get_name(i)
+            self.registry[item_name] = i
 
     def resolve(self, name: str):
         return self.registry[name]
