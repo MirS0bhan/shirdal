@@ -1,9 +1,9 @@
 from typing import Type, Dict, Any, List
 
+from pydantic import BaseModel
+
 from .socket import ServerSocket, ClientSocket
 from .serialize import MsgPackSerializer, Serializer
-
-from pydantic import BaseModel
 
 
 class Params(BaseModel):
@@ -19,10 +19,9 @@ class Message(BaseModel):
 class ServerRPC(ServerSocket):
     def __init__(self, port, serializer: Type[Serializer] = MsgPackSerializer):
         super().__init__(serializer(), port)
-
-    def _start_server(self):
         self.setup()
 
+    def _start_server(self):
         while True:
             raw = self.recv()
             message = Message(**raw)
@@ -45,13 +44,13 @@ class ClientRPC(ClientSocket):
         self.setup()
 
     def _call(self, method, *args, **kwargs):
-        request = Message(
-            method=method,
-            params=Params(
-                args=args,
-                kwargs=kwargs
-            )
-        ).model_dump()
+        request = {
+            'method': method,
+            'params': {
+                'args': args,
+                'kwargs': kwargs
+            }
+        }
 
         self.send(request)
         response = self.recv()

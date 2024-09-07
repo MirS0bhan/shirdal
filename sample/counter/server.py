@@ -1,12 +1,10 @@
 from shirdal import Application, Broker, BrokerType
 from dataclasses import dataclass
 
-import cProfile
-
 
 broker = Broker.create(BrokerType.SERVER, "*", 8282)
-
 app = Application(broker)
+broker.start()
 
 
 @dataclass
@@ -17,8 +15,6 @@ class PrintMessage:
 
 
 @app.service
-def printer(msg: PrintMessage):
+def printer(msg):
     print(msg["msg"], msg["num"])
 
-
-cProfile.run("broker.start()")

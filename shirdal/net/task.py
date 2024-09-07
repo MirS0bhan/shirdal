@@ -1,9 +1,9 @@
-from shirdal.core.queue import AbstractQueue
-from .rpc import ServerRPC, ClientRPC
-
 from threading import Thread
 
+from shirdal.core.queue import AbstractQueue
 from shirdal.core.task import TaskManager
+
+from .rpc import ServerRPC, ClientRPC
 
 
 class ServerTaskManager(ServerRPC, TaskManager, Thread):

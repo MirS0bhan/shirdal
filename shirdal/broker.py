@@ -1,9 +1,8 @@
-import threading
-from enum import Enum, auto
+from enum   import Enum, auto
 from typing import Callable, Dict, Optional
 
 from shirdal.core import TaskExecutor, Container, ListQueue, TaskManager
-from shirdal.net import ServerTaskManager, ClientTaskManager
+from shirdal.net  import ServerTaskManager, ClientTaskManager
 
 
 class BrokerType(Enum):
@@ -20,7 +19,8 @@ class Broker:
     def start(self):
         if self.task_executor:
             self.task_executor.start()
-            self.task_manager.start()
+            if hasattr(self.task_manager, 'start'):
+                self.task_manager.start()
 
     def stop(self):
         if self.task_executor:

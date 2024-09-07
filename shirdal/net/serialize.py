@@ -1,7 +1,7 @@
-from abc import ABC, abstractmethod
+from abc    import ABC, abstractmethod
 from typing import Dict, Any, Type
 
-from msgpack import packb, unpackb
+from msgpack  import packb, unpackb
 from pydantic import BaseModel
 
 
@@ -33,4 +33,3 @@ class MsgPackSerializer(Serializer):
     @classmethod
     def deserialize(cls, item: Dict[Any, Any]):
         return unpackb(item)
-

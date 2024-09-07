@@ -1,5 +1,3 @@
-import time
-
 from threading import Thread, Lock, Condition
 
 from .queue import AbstractQueue
@@ -23,10 +21,6 @@ class TaskManager:
                 self.condition.wait()  # Wait for a task to be added
             return self.tasks.dequeue()
 
-    def purge(self) -> None:
-        with self.lock:
-            pass  # Clear all tasks
-
 
 class TaskExecutor(Thread):
     def __init__(self, manager: TaskManager, container: Container):
@@ -42,4 +36,3 @@ class TaskExecutor(Thread):
                 func(task)  # Execute the task
             except Exception as e:
                 print(f"Error executing task: {e}")
-            #time.sleep(0.0001)  # Sleep to prevent busy waiting
