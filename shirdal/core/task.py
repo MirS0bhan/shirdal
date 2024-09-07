@@ -1,15 +1,16 @@
-import threading
 import time
 
-from .queue import AbstractQueue, ListQueue
+from threading import Thread, Lock, Condition
+
+from .queue import AbstractQueue
 from .container import Container
 
 
 class TaskManager:
     def __init__(self, queue: AbstractQueue):
         self.tasks = queue  # Use deque for task queue
-        self.lock = threading.Lock()
-        self.condition = threading.Condition(self.lock)
+        self.lock = Lock()
+        self.condition = Condition(self.lock)
 
     def add_task(self, task: object) -> None:
         with self.condition:
@@ -27,27 +28,18 @@ class TaskManager:
             pass  # Clear all tasks
 
 
-class TaskExecutor:
+class TaskExecutor(Thread):
     def __init__(self, manager: TaskManager, container: Container):
         self.manager = manager
         self.container = container
-        self.thread = threading.Thread(target=self.run)
-        self.thread.daemon = True  # Daemonize thread
-        self.thread.start()
+        super().__init__()
 
     def run(self) -> None:
         while True:
             task = self.manager.get_task()
-            func = self.container.resolve(task)
+            func = self.container.resolve(task["endpoint"])
             try:
                 func(task)  # Execute the task
             except Exception as e:
                 print(f"Error executing task: {e}")
-            time.sleep(0.0001)  # Sleep to prevent busy waiting
-
-
-class Broker:
-    def __init__(self):
-        self.tm = TaskManager(ListQueue)
-        self.co = Container()
-        self.te = TaskExecutor(self.tm, self.co)
+            #time.sleep(0.0001)  # Sleep to prevent busy waiting

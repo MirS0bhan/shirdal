@@ -20,8 +20,9 @@ class ServerRPC(ServerSocket):
     def __init__(self, port, serializer: Type[Serializer] = MsgPackSerializer):
         super().__init__(serializer(), port)
 
-    def start(self):
+    def _start_server(self):
         self.setup()
+
         while True:
             raw = self.recv()
             message = Message(**raw)
@@ -41,8 +42,9 @@ class ClientRPC(ClientSocket):
     def __init__(self, host, port):
         serializer = MsgPackSerializer()
         super().__init__(serializer, host, port)
+        self.setup()
 
-    def call(self, method, *args, **kwargs):
+    def _call(self, method, *args, **kwargs):
         request = Message(
             method=method,
             params=Params(

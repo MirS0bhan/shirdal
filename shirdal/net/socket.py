@@ -46,7 +46,6 @@ class ServerSocket(Socket):
 
     def setup(self):
         self.socket.bind(f'tcp://*:{self.port}')
-        print(f"Server is running and listening on port {self.port}...")
 
 
 class ClientSocket(Socket):

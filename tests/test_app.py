@@ -16,7 +16,7 @@ class TestApplication(unittest.TestCase):
         self.app.service(self.mock_service)
 
         # Check if the service is registered in the container
-        self.assertIn(self.mock_service, self.app.container)
+        self.assertIn(self.mock_service, self.app.broker.co)
 
     def test_operate(self):
         # Register a mock service that we can call
