@@ -1,9 +1,24 @@
-from typing import Dict, Union, Callable, Container as Ctrn
+from abc import ABC, abstractmethod
+from typing import Dict, Union, Callable, Container as Ctrn, Any
 
 from shirdal.utils import get_name
 
 
-class Container(Ctrn):
+class ContainerAbstract(ABC, Ctrn):
+    @abstractmethod
+    def __init__(self):
+        self.registry: Dict[Any, Any] = {}
+
+    @abstractmethod
+    def register(self, item: Any):
+        NotImplemented()
+
+    @abstractmethod
+    def resolve(self, addr: Any):
+        NotImplemented()
+
+
+class Container(ContainerAbstract):
     def __init__(self):
         self.registry: Dict[str, Union[object, Callable]] = {}
 

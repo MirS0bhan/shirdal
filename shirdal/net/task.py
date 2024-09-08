@@ -10,7 +10,7 @@ class ServerTaskManager(ServerRPC, TaskManager, Thread):
     def __init__(self, port, queue: AbstractQueue):
         ServerRPC.__init__(self, port)
         TaskManager.__init__(self, queue)
-        Thread.__init__(self)
+        Thread.__init__(self, daemon=True)
 
     def run(self):
         self._start_server()
