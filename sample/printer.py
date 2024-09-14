@@ -1,23 +1,38 @@
-from shirdal import Application
-from dataclasses import dataclass
-from time import sleep
+import asyncio
+from time import ctime
 
-app = Application()
+from shirdal import MessagingSystem, Service, Message
 
 
-@dataclass
-class PrintMessage:
+class PrintMessage(Message):
     msg: str
-    endpoint: str = 'printer'
 
 
-@app.service
-def printer(msg: PrintMessage):
-    print(msg.msg)
+class Log(Message):
+    time: str
+    message: str
 
 
-message = PrintMessage("hello world!")
+class Printer(Service):
+    async def printer(self, msg: PrintMessage):
+        print(msg.msg)
+        return Log(message=msg.msg, time=ctime())
 
-app.operate(message)
+    async def log(self, log: Log):
+        print("message", log.message, "printed at:", log.time)
 
-sleep(0.000000000000001)  # we need this sleep to program didn't get colse before task run
+
+ms = MessagingSystem('localhost', 6985, Printer())
+ms.start()
+
+
+async def main():
+    await asyncio.sleep(0.1)
+    message = PrintMessage(msg="hello world!")
+
+    await ms.publish(message)
+    await asyncio.sleep(1)
+    await ms.publish(message)
+
+
+asyncio.run(main())

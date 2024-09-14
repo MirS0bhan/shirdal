@@ -1,16 +1,18 @@
-from typing import Callable
+from typing import Callable, Union
 
-from shirdal.utils import get_methods, get_type_list
+from pydantic import TypeAdapter
 
-from container import ContainerAbstract
+from .core.container import ContainerAbstract
+from .utils import get_methods, get_type_list, get_name
 
 
 class ServiceContainer(ContainerAbstract):
     def __init__(self):
         self.registry = {}
 
-    def resolve(self, name: str):
-        pass
+    async def resolve(self, name: str):
+        for a in self.registry.get(name.__class__):
+            yield a
 
     def register(self, *items: Callable):
         for method in items:
@@ -24,9 +26,15 @@ class ServiceContainer(ContainerAbstract):
 
 
 class Service:
+    topic: str = ''
+
     def __init__(self):
         self.container = ServiceContainer()
         self.container.register(*get_methods(self))
+
+        #
+        message_types = list(self.container.registry.keys())
+        self.message_type_adaptor = TypeAdapter(Union[tuple(message_types)])
 
 
 def register(srvc: Service):

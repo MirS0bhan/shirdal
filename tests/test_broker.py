@@ -1,56 +1,129 @@
 import unittest
+from enum import Enum, auto
 
-from shirdal.core.broker import TaskManager, TaskExecutor
+# Assuming the classes are imported from the module where they are defined
+from shirdal import Broker, BrokerManager, BrokerType
+from shirdal.core import TaskExecutor, TaskManager, ListQueue, Container
+from shirdal.net import ServerTaskManager, ClientTaskManager
 
-import time
 
-
-class TestTaskManagerAndExecutor(unittest.TestCase):
+class TestBroker(unittest.TestCase):
     def setUp(self):
-        self.task_manager = TaskManager()
-        self.task_executor = TaskExecutor(self.task_manager)
-        self.executed_tasks = []
+        # Create real instances of the dependencies
+        self.container = Container()
+        self.task_manager = TaskManager(ListQueue())
+        self.task_executor = TaskExecutor(self.task_manager, self.container)
+        self.broker = Broker(self.task_manager, self.task_executor)
 
-    def task_factory(self, task_id):
-        def task():
-            self.executed_tasks.append(task_id)
+    def test_broker_start(self):
+        self.broker.start()
+        # Check if the task executor and task manager are started
+        self.assertTrue(self.task_executor.is_running)
+        self.assertTrue(self.task_manager.is_running)
 
-        return task
+    def test_broker_stop(self):
+        self.broker.start()  # Start first to ensure stop has an effect
+        self.broker.stop()
+        # Check if the task executor and task manager are stopped
+        self.assertFalse(self.task_executor.is_running)
+        self.assertFalse(self.task_manager.is_running)
 
-    def test_task_execution(self):
-        # Add tasks
-        self.task_manager.add_task(self.task_factory(1))
-        self.task_manager.add_task(self.task_factory(2))
-        self.task_manager.add_task(self.task_factory(3))
+    def test_broker_publish(self):
+        topic = "test_topic"
+        message = "test_message"
+        self.broker.publish(topic, message)
+        # Check if the message was published (this would depend on your TaskManager implementation)
+        self.assertIn((topic, message), self.task_manager.messages)
 
-        # Allow some time for tasks to be executed
-        time.sleep(1)
+    def test_broker_subscribe(self):
+        topic = "test_topic"
+        received_messages = []
 
-        # Check that all tasks have been executed
-        self.assertEqual(self.executed_tasks, [1, 2, 3])
+        def callback(message):
+            received_messages.append(message)
 
-    def test_task_addition_after_delay(self):
-        # Add initial task
-        self.task_manager.add_task(self.task_factory(1))
+        self.broker.subscribe(topic, callback)
+        self.broker.publish(topic, "test_message")
+        # Check if the callback was called with the correct message
+        self.assertIn("test_message", received_messages)
 
-        # Allow some time for the first task to be executed
-        time.sleep(0.5)
+    def test_broker_create_local(self):
+        broker = Broker.create(BrokerType.LOCAL)
+        self.assertIsInstance(broker, Broker)
+        self.assertIsInstance(broker.task_manager, TaskManager)
+        self.assertIsInstance(broker.task_executor, TaskExecutor)
 
-        # Add another task after delay
-        self.task_manager.add_task(self.task_factory(2))
+    def test_broker_create_server(self):
+        broker = Broker.create(BrokerType.SERVER, port=1234)
+        self.assertIsInstance(broker, Broker)
+        self.assertIsInstance(broker.task_manager, ServerTaskManager)
+        self.assertIsInstance(broker.task_executor, TaskExecutor)
 
-        # Allow some time for all tasks to be executed
-        time.sleep(1)
+    def test_broker_create_client(self):
+        broker = Broker.create(BrokerType.CLIENT, host='localhost', port=1234)
+        self.assertIsInstance(broker, Broker)
+        self.assertIsInstance(broker.task_manager, ClientTaskManager)
 
-        # Check that all tasks have been executed in order
-        self.assertEqual(self.executed_tasks, [1, 2])
+    def test_broker_create_invalid_type(self):
+        with self.assertRaises(ValueError):
+            Broker.create(Enum('InvalidType', 'INVALID'))
 
-    def test_no_tasks_executed_when_none_added(self):
-        # Allow some time to verify that no tasks are executed
-        time.sleep(1)
 
-        # Check that no tasks have been executed
-        self.assertEqual(self.executed_tasks, [])
+class TestBrokerManager(unittest.TestCase):
+    def setUp(self):
+        self.broker_manager = BrokerManager()
+
+    def test_create_broker(self):
+        broker = self.broker_manager.create_broker('test_broker', BrokerType.LOCAL)
+        self.assertIsInstance(broker, Broker)
+        self.assertIn('test_broker', self.broker_manager.brokers)
+
+    def test_get_broker(self):
+        broker = self.broker_manager.create_broker('test_broker', BrokerType.LOCAL)
+        retrieved_broker = self.broker_manager.get_broker('test_broker')
+        self.assertEqual(broker, retrieved_broker)
+
+    def test_start_all(self):
+        broker = self.broker_manager.create_broker('test_broker', BrokerType.LOCAL)
+        self.broker_manager.start_all()
+        self.assertTrue(broker.task_executor.is_running)
+        self.assertTrue(broker.task_manager.is_running)
+
+    def test_stop_all(self):
+        broker = self.broker_manager.create_broker('test_broker', BrokerType.LOCAL)
+        self.broker_manager.start_all()  # Start first to ensure stop has an effect
+        self.broker_manager.stop_all()
+        self.assertFalse(broker.task_executor.is_running)
+        self.assertFalse(broker.task_manager.is_running)
+
+    def test_publish(self):
+        broker = self.broker_manager.create_broker('test_broker', BrokerType.LOCAL)
+        topic = "test_topic"
+        message = "test_message"
+        self.broker_manager.publish('test_broker', topic, message)
+        # Check if the message was published to the correct broker
+        self.assertIn((topic, message), broker.task_manager.messages)
+
+    def test_publish_broker_not_found(self):
+        with self.assertRaises(ValueError):
+            self.broker_manager.publish('non_existent_broker', 'test_topic', 'test_message')
+
+    def test_subscribe(self):
+        broker = self.broker_manager.create_broker('test_broker', BrokerType.LOCAL)
+        topic = "test_topic"
+        received_messages = []
+
+        def callback(message):
+            received_messages.append(message)
+
+        self.broker_manager.subscribe('test_broker', topic, callback)
+        self.broker_manager.publish('test_broker', topic, "test_message")
+        # Check if the callback was called with the correct message
+        self.assertIn("test_message", received_messages)
+
+    def test_subscribe_broker_not_found(self):
+        with self.assertRaises(ValueError):
+            self.broker_manager.subscribe('non_existent_broker', 'test_topic', lambda x: None)
 
 
 if __name__ == '__main__':

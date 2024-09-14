@@ -1,99 +1,100 @@
-from enum   import Enum, auto
-from typing import Callable, Dict, Optional
+import asyncio
+from threading import Thread
+from typing import (
+    AsyncGenerator,
+    Callable,
+    Coroutine,
+    Optional,
+    Any,
 
-from shirdal.core import TaskExecutor, Container, ListQueue, TaskManager
-from shirdal.net  import ServerTaskManager, ClientTaskManager
+    Dict,
+)
 
+import zmq
+import msgpack
 
-class BrokerType(Enum):
-    LOCAL = auto()
-    SERVER = auto()
-    CLIENT = auto()
-
-
-class Broker:
-    def __init__(self, task_manager: TaskManager, task_executor: Optional[TaskExecutor] = None):
-        self.task_manager = task_manager
-        self.task_executor = task_executor
-
-    def start(self):
-        if self.task_executor:
-            self.task_executor.start()
-            if hasattr(self.task_manager, 'start'):
-                self.task_manager.start()
-
-    def stop(self):
-        if self.task_executor:
-            self.task_manager.stop()
-            self.task_executor.stop()
-
-    def publish(self, topic: str, message: str):
-        if isinstance(self.task_manager, TaskManager):
-            self.task_manager.publish(topic, message)
-        else:
-            # Implement publish logic for server and client brokers
-            pass
-
-    def subscribe(self, topic: str, callback: Callable[[str], None]):
-        if isinstance(self.task_manager, TaskManager):
-            self.task_manager.subscribe(topic, callback)
-        else:
-            # Implement subscribe logic for server and client brokers
-            pass
-
-    @staticmethod
-    def create(broker_type: BrokerType, host=None, port=6985) -> 'Broker':
-        match broker_type:
-            case BrokerType.LOCAL:
-                container = Container()
-                task_manager = TaskManager(ListQueue())
-                task_executor = TaskExecutor(task_manager, container)
-                return Broker(task_manager, task_executor)
-
-            case BrokerType.SERVER:
-                container = Container()
-                task_manager = ServerTaskManager(port, ListQueue())
-                task_executor = TaskExecutor(task_manager, container)
-                return Broker(task_manager, task_executor)
-
-            case BrokerType.CLIENT:
-                task_manager = ClientTaskManager(host, port)
-                return Broker(task_manager)
-
-            case _:
-                raise ValueError(f"Unknown broker type: {broker_type}")
+from shirdal import Service, Message
 
 
-class BrokerManager:
-    def __init__(self):
-        self.brokers: Dict[str, Broker] = {}
+def serialize_message(message: Dict[str, Any]) -> bytes:
+    """Serialize a message dictionary into bytes using msgpack."""
+    return msgpack.packb(message)
 
-    def create_broker(self, name: str, broker_type: BrokerType, endpoint: Optional[str] = None) -> Broker:
-        broker = Broker.create(broker_type, endpoint)
-        self.brokers[name] = broker
-        return broker
 
-    def get_broker(self, name: str) -> Broker:
-        return self.brokers.get(name)
+def deserialize_message(raw_message: bytes) -> Dict[str, Any]:
+    """Deserialize raw bytes into a message dictionary using msgpack."""
+    return msgpack.unpackb(raw_message)
 
-    def start_all(self):
-        for broker in self.brokers.values():
-            broker.start()
 
-    def stop_all(self):
-        for broker in self.brokers.values():
-            broker.stop()
+async def publisher(
+        context: zmq.Context,
+        host: str, port: int, topic: str,
+        serializer: Callable[[Dict[str, Any]], bytes]
+        ) -> Callable[[Message], Coroutine[Any, None, None]]:
 
-    def publish(self, name: str, topic: str, message: str):
-        broker = self.get_broker(name)
-        if broker:
-            broker.publish(topic, message)
-        else:
-            raise ValueError(f"Broker not found: {name}")
+    socket: zmq.Socket = context.socket(zmq.PUB)
+    socket.bind(f"tcp://{host}:{port}")
+    topic_encoded: bytes = topic.encode('utf-8') + b'\0'
 
-    def subscribe(self, name: str, topic: str, callback: Callable[[str], None]):
-        broker = self.get_broker(name)
-        if broker:
-            broker.subscribe(topic, callback)
-        else:
-            raise ValueError(f"Broker not found: {name}")
+    async def publish(message: Message) -> None:
+        raw_bin_msg: bytes = serializer(message.model_dump())
+        socket.send(raw_bin_msg)
+
+    return publish
+
+
+async def subscribe(
+        context: zmq.Context, host: str, port: int, topic: str
+) -> AsyncGenerator[Dict[str, Any], None]:
+    socket: zmq.Socket = context.socket(zmq.SUB)
+    socket.connect(f"tcp://{host}:{port}")
+    socket.setsockopt_string(zmq.SUBSCRIBE, topic)
+
+    while True:
+        raw_bin_msg: bytes = socket.recv()
+        # Split the topic from the message
+        raw_msg = raw_bin_msg
+        message_dict: Dict[str, Any] = deserialize_message(raw_msg)
+        yield message_dict
+
+
+async def executor(
+        subscriber: AsyncGenerator[Dict[str, Any], None],
+        publish: Callable[[Message], Coroutine[Any, None, None]],
+        service: Service
+) -> None:
+    async for message in subscriber:
+        validated_message: Message = service.message_type_adaptor.validate_python(message)
+        async for func in service.container.resolve(validated_message):
+            r = await func(validated_message)
+            if r:
+                await publish(r)
+
+
+class MessagingSystem(Thread):
+    def __init__(self, host: str, port: int, service: Service):
+        super().__init__()
+        self.host: str = host
+        self.port: int = port
+
+        self.service: Service = service
+        self.topic: str = service.topic
+        self.context: zmq.Context = zmq.Context()
+
+        self.publish: Optional[Callable[[Message], Coroutine[None, None, None]]] = None
+        self.subscriber: Optional[AsyncGenerator[Dict, None]] = None
+
+    async def _run(self) -> None:
+        # Launch publisher and subscriber
+        self.publish = await publisher(self.context, self.host, self.port, self.topic, serialize_message)
+        self.subscriber = subscribe(self.context, self.host, self.port, self.topic)
+        # Run the executor to process incoming messages
+        await executor(self.subscriber, self.publish, self.service)
+
+    def run(self) -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self._run())
+        finally:
+            loop.close()
